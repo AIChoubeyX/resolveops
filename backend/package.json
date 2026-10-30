@@ -1,0 +1,29 @@
+{
+  "name": "resolveops-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Express REST API backend for ResolveOps",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:migrate": "node scripts/migrate.js",
+    "test": "node --test tests/**/*.test.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "firebase-admin": "^13.0.2",
+    "pg": "^8.13.1",
+    "resolveops": "file:.."
+  },
+  "keywords": [
+    "express",
+    "rest-api",
+    "backend"
+  ],
+  "author": "ResolveOps Team",
+  "license": "MIT"
+}

@@ -1,0 +1,29 @@
+{
+  "name": "resolveops",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-assisted support and technical incident management platform",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"blue,green\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "test:backend": "npm --prefix backend test",
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "keywords": [
+    "support",
+    "incident-management",
+    "ai-ops",
+    "fullstack",
+    "express",
+    "react",
+    "vite"
+  ],
+  "author": "ResolveOps Team",
+  "license": "MIT"
+}
