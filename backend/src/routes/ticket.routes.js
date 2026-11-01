@@ -3,7 +3,6 @@ import {
   getActivity,
   getComments,
   getOneTicket,
-  getOrganizationMembers,
   getOrganizationMetrics,
   getOrganizationTickets,
   getOrganizations,
@@ -16,7 +15,6 @@ import { requireFirebaseAuth } from '../middleware/firebaseAuth.js';
 const router = Router();
 
 router.get('/organizations', requireFirebaseAuth, getOrganizations);
-router.get('/organizations/:organizationId/members', requireFirebaseAuth, getOrganizationMembers);
 router.get('/organizations/:organizationId/metrics', requireFirebaseAuth, getOrganizationMetrics);
 router.get('/organizations/:organizationId/tickets', requireFirebaseAuth, getOrganizationTickets);
 router.post('/organizations/:organizationId/tickets', requireFirebaseAuth, postOrganizationTicket);

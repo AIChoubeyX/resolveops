@@ -40,8 +40,27 @@ export const getTicketComments = (ticketId, user) => request(`/tickets/${ticketI
 export const addTicketComment = (ticketId, body, user) => request(`/tickets/${ticketId}/comments`, {
   method: 'POST', body: JSON.stringify({ body }),
 }, user);
+export const addTicketEntry = (ticketId, body, visibility, user) => request(`/tickets/${ticketId}/comments`, {
+  method: 'POST', body: JSON.stringify({ body, visibility }),
+}, user);
 export const getTicketActivity = (ticketId, user) => request(`/tickets/${ticketId}/activity`, {}, user);
 export const getOrganizationMetrics = (organizationId, user) => request(`/organizations/${organizationId}/metrics`, {}, user);
+export const getOrganizationSettings = (organizationId, user) => request(`/organizations/${organizationId}/settings`, {}, user);
+export const updateOrganizationSettings = (organizationId, input, user) => request(`/organizations/${organizationId}/settings`, {
+  method: 'PATCH', body: JSON.stringify(input),
+}, user);
+export const updateOrganizationMember = (organizationId, userId, role, user) => request(`/organizations/${organizationId}/members/${userId}`, {
+  method: 'PATCH', body: JSON.stringify({ role }),
+}, user);
+export const removeOrganizationMember = (organizationId, userId, user) => request(`/organizations/${organizationId}/members/${userId}`, {
+  method: 'DELETE',
+}, user);
+export const inviteOrganizationMember = (organizationId, email, user) => request(`/organizations/${organizationId}/invitations`, {
+  method: 'POST', body: JSON.stringify({ email }),
+}, user);
+export const acceptInvitation = (token, user) => request(`/invitations/${encodeURIComponent(token)}/accept`, {
+  method: 'POST',
+}, user);
 
 export const checkApiHealth = async () => {
   try {

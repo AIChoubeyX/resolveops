@@ -8,6 +8,8 @@ const migrationPaths = [
   path.resolve(scriptDirectory, '../migrations/001_initial_schema.sql'),
   path.resolve(scriptDirectory, '../migrations/002_ticket_activity.sql'),
   path.resolve(scriptDirectory, '../migrations/003_ticket_resolution_notes.sql'),
+  path.resolve(scriptDirectory, '../migrations/004_workspace_invitations.sql'),
+  path.resolve(scriptDirectory, '../migrations/005_ticket_lifecycle_collaboration.sql'),
 ];
 
 const run = async () => {

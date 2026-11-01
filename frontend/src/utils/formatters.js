@@ -27,6 +27,10 @@ export const getStatusBadgeStyle = (status) => {
       return 'bg-amber-50 text-amber-700 border-amber-200';
     case 'resolved':
       return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'pending':
+      return 'bg-violet-50 text-violet-700 border-violet-200';
+    case 'closed':
+      return 'bg-slate-100 text-slate-700 border-slate-300';
     default:
       return 'bg-slate-50 text-slate-700 border-slate-200';
   }

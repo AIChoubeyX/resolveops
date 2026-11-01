@@ -94,6 +94,11 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const refreshProfile = async () => {
+    if (!auth.currentUser) return null;
+    return synchronize(auth.currentUser);
+  };
+
   const value = useMemo(() => ({
     user,
     profile,
@@ -102,6 +107,7 @@ export function AuthProvider({ children }) {
     setActiveOrganizationId,
     loading: loading || syncing,
     authError,
+    refreshProfile,
     signIn: (email, password) => authenticate(() => signInWithEmailAndPassword(auth, email, password)),
     signUp: async (email, password, displayName) => authenticate(async () => {
       const result = await createUserWithEmailAndPassword(auth, email, password);

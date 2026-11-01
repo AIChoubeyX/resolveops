@@ -1,7 +1,7 @@
 import React from 'react';
 
 /**
- * Metric Summary Card with clean typography and explicit demo tagging.
+ * Metric Summary Card with clean typography.
  */
 export const StatCard = ({ title, value, changeText, changeType = 'neutral', icon: Icon }) => {
   const changeColors = {
@@ -24,9 +24,6 @@ export const StatCard = ({ title, value, changeText, changeType = 'neutral', ico
 
       <div className="mt-3 flex items-baseline justify-between">
         <span className="text-2xl font-bold tracking-tight text-slate-900">{value}</span>
-        <span className="text-[10px] font-semibold tracking-wide uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
-          Demo Data
-        </span>
       </div>
 
       {changeText && (

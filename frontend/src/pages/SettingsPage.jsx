@@ -1,10 +1,98 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/ui/Card.jsx';
 import { Button } from '../components/ui/Button.jsx';
-import { DemoNotice } from '../components/ui/DemoNotice.jsx';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import {
+  getOrganizationMembers,
+  getOrganizationSettings,
+  inviteOrganizationMember,
+  removeOrganizationMember,
+  updateOrganizationMember,
+  updateOrganizationSettings,
+} from '../services/api.js';
+
+const roleOptions = ['admin', 'agent', 'reporter'];
 
 export const SettingsPage = () => {
+  const {
+    user, organizations, activeOrganizationId, setActiveOrganizationId, refreshProfile,
+  } = useAuth();
   const [activeTab, setActiveTab] = useState('general');
+  const [organization, setOrganization] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [name, setName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteLink, setInviteLink] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+
+  const membership = useMemo(
+    () => organizations.find((item) => String(item.id) === String(activeOrganizationId)),
+    [activeOrganizationId, organizations]
+  );
+  const isAdmin = membership?.role === 'admin';
+
+  const load = async () => {
+    if (!activeOrganizationId) return;
+    setLoading(true);
+    setError('');
+    try {
+      const [currentOrganization, currentMembers] = await Promise.all([
+        getOrganizationSettings(activeOrganizationId, user),
+        getOrganizationMembers(activeOrganizationId, user),
+      ]);
+      setOrganization(currentOrganization);
+      setName(currentOrganization.name);
+      setMembers(currentMembers);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, [activeOrganizationId, user]);
+
+  const saveName = async (event) => {
+    event.preventDefault();
+    setSaving(true); setError(''); setMessage('');
+    try {
+      const updated = await updateOrganizationSettings(activeOrganizationId, { name }, user);
+      setOrganization(updated);
+      await refreshProfile();
+      setMessage('Workspace name saved.');
+    } catch (requestError) { setError(requestError.message); } finally { setSaving(false); }
+  };
+
+  const invite = async (event) => {
+    event.preventDefault();
+    setSaving(true); setError(''); setMessage(''); setInviteLink('');
+    try {
+      const result = await inviteOrganizationMember(activeOrganizationId, inviteEmail, user);
+      setInviteEmail('');
+      setInviteLink(`${window.location.origin}${result.invitationUrl}`);
+      setMessage('Invitation created. Share this development link with your teammate.');
+    } catch (requestError) { setError(requestError.message); } finally { setSaving(false); }
+  };
+
+  const changeRole = async (memberId, role) => {
+    setSaving(true); setError(''); setMessage('');
+    try {
+      await updateOrganizationMember(activeOrganizationId, memberId, role, user);
+      await load(); setMessage('Member role updated.');
+    } catch (requestError) { setError(requestError.message); } finally { setSaving(false); }
+  };
+
+  const removeMember = async (memberId) => {
+    if (!window.confirm('Remove this member from the workspace?')) return;
+    setSaving(true); setError(''); setMessage('');
+    try {
+      await removeOrganizationMember(activeOrganizationId, memberId, user);
+      await load(); setMessage('Member removed.');
+    } catch (requestError) { setError(requestError.message); } finally { setSaving(false); }
+  };
 
   const tabs = [
     { id: 'general', name: 'General & Organization' },
@@ -13,137 +101,23 @@ export const SettingsPage = () => {
     { id: 'webhooks', name: 'Integrations & Webhooks' },
   ];
 
+  if (loading) return <div className="p-10 text-center text-sm text-slate-500">Loading workspace settings...</div>;
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Settings & Configuration</h2>
-        <p className="text-sm text-slate-500 mt-1">
-          Manage system preferences, team access, and AI automation rules.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div><h2 className="text-2xl font-bold tracking-tight text-slate-900">Settings & Configuration</h2><p className="text-sm text-slate-500 mt-1">Manage the selected workspace and team access.</p></div>
+        <select value={activeOrganizationId} onChange={(event) => setActiveOrganizationId(event.target.value)} className="px-3 py-2 text-sm border border-slate-300 rounded-lg">{organizations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
       </div>
+      {message && <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-700">{message}</div>}
+      {error && <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-sm text-rose-700">{error}</div>}
+      <div className="border-b border-slate-200"><nav className="-mb-px flex space-x-6 overflow-x-auto">{tabs.map((tab) => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`pb-3 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === tab.id ? 'border-brand-600 text-brand-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>{tab.name}</button>)}</nav></div>
 
-      <DemoNotice message="Settings configurations are simulated placeholders. Database persistence and tenant configuration will be implemented in Phase 4." />
+      {activeTab === 'general' && <Card title="Workspace Profile" subtitle="Changes apply to this workspace for every member."><form onSubmit={saveName} className="space-y-4 max-w-xl"><label className="block text-xs font-semibold text-slate-700">Workspace name<input disabled={!isAdmin || saving} value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full px-3 py-2 text-sm border border-slate-300 rounded-lg" /></label>{isAdmin ? <Button type="submit" disabled={saving || !name.trim()}>{saving ? 'Saving...' : 'Save workspace'}</Button> : <p className="text-xs text-slate-500">Only workspace admins can update settings.</p>}</form></Card>}
 
-      {/* Tabs */}
-      <div className="border-b border-slate-200">
-        <nav className="-mb-px flex space-x-6 overflow-x-auto">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`pb-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-                activeTab === tab.id
-                  ? 'border-brand-600 text-brand-600 font-semibold'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-              }`}
-            >
-              {tab.name}
-            </button>
-          ))}
-        </nav>
-      </div>
+      {activeTab === 'team' && <Card title="Team Members" subtitle="Members and roles in the selected workspace."><div className="space-y-4">{isAdmin && <form onSubmit={invite} className="flex flex-col sm:flex-row gap-2"><input type="email" required value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="teammate@example.com" className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg" /><Button type="submit" disabled={saving}>{saving ? 'Creating...' : 'Create invite link'}</Button></form>}{inviteLink && <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-xs text-blue-800 break-all"><strong>Development invitation link:</strong> {inviteLink}</div>}<div className="space-y-2">{members.length === 0 && <p className="text-sm text-slate-500">No members found.</p>}{members.map((member) => <div key={member.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border border-slate-200"><div><p className="text-sm font-semibold text-slate-900">{member.display_name || 'Unnamed member'}</p><p className="text-xs text-slate-500">{member.email}</p></div><div className="flex items-center gap-2">{isAdmin ? <select disabled={saving} value={member.role} onChange={(event) => changeRole(member.id, event.target.value)} className="px-2 py-1 text-xs border rounded-lg">{roleOptions.map((role) => <option key={role} value={role}>{role}</option>)}</select> : <span className="text-xs px-2 py-1 rounded border">{member.role}</span>}{isAdmin && <Button variant="outline" size="sm" disabled={saving || member.role === 'admin' && members.filter((item) => item.role === 'admin').length === 1} onClick={() => removeMember(member.id)}>Remove</Button>}</div></div>)}</div></div></Card>}
 
-      {/* Tab Panels */}
-      {activeTab === 'general' && (
-        <Card title="Workspace Profile" subtitle="General metadata and time zone configuration">
-          <div className="space-y-4 max-w-xl text-sm">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Organization Name</label>
-              <input
-                type="text"
-                disabled
-                defaultValue="Acme Cloud Engineering"
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-600 cursor-not-allowed"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Default Incident SLA (Hours)</label>
-              <input
-                type="number"
-                disabled
-                defaultValue={4}
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-600 cursor-not-allowed"
-              />
-            </div>
-            <div className="pt-2">
-              <Button variant="primary" size="sm" disabled>
-                Save Changes (Phase 4)
-              </Button>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {activeTab === 'team' && (
-        <Card title="Team Members" subtitle="Engineers and support agents with portal access">
-          <div className="space-y-3">
-            {[
-              { name: 'Ashutosh S.', email: 'ashutosh@example.com', role: 'Support Lead (Admin)' },
-              { name: 'Sarah Chen', email: 'sarah.chen@example.com', role: 'Staff SRE' },
-              { name: 'Alex Rivera', email: 'alex.rivera@example.com', role: 'Backend Engineer' },
-              { name: 'Marcus Reed', email: 'marcus.reed@example.com', role: 'Infrastructure' },
-            ].map((member) => (
-              <div key={member.email} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50/50">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{member.name}</p>
-                  <p className="text-xs text-slate-500">{member.email}</p>
-                </div>
-                <span className="text-xs font-medium text-slate-600 bg-white px-2.5 py-1 rounded border border-slate-200">
-                  {member.role}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {activeTab === 'ai' && (
-        <Card title="AI Intelligence Tuning" subtitle="Configure automated classification and draft generation parameters">
-          <div className="space-y-4 max-w-xl text-sm">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Classification Model</label>
-              <select disabled className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-600 cursor-not-allowed">
-                <option>Fast Classifier (Gemini 1.5 Flash)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Minimum Confidence Threshold for Auto-Tagging</label>
-              <input
-                type="text"
-                disabled
-                defaultValue="85%"
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-600 cursor-not-allowed"
-              />
-            </div>
-            <p className="text-xs text-slate-400">
-              AI Worker pipelines will be connected to the background queue in Phase 3.
-            </p>
-          </div>
-        </Card>
-      )}
-
-      {activeTab === 'webhooks' && (
-        <Card title="Incoming & Outgoing Integrations" subtitle="Connect external alerting systems">
-          <div className="space-y-3">
-            {[
-              { name: 'Slack Incident Alerts', desc: 'Post critical incident updates to #incident-room' },
-              { name: 'GitHub Issues Sync', desc: 'Link escalated support tickets to engineering repositories' },
-              { name: 'PagerDuty On-Call', desc: 'Trigger on-call escalation schedules on severity P1' },
-            ].map((integration) => (
-              <div key={integration.name} className="flex items-center justify-between p-3.5 rounded-lg border border-slate-200 bg-white">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{integration.name}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{integration.desc}</p>
-                </div>
-                <Button variant="outline" size="sm" disabled className="text-xs">
-                  Connect (Phase 4)
-                </Button>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      {activeTab === 'ai' && <Card title="AI Models & RAG" subtitle="Current capability state"><p className="text-sm text-slate-600">AI classification, model configuration, and RAG indexing are not connected in this build. No API keys or simulated operational values are shown.</p><p className="mt-3 text-xs text-slate-500">Status: unavailable until the AI worker and Knowledge Base are implemented.</p></Card>}
+      {activeTab === 'webhooks' && <Card title="Integrations & Webhooks" subtitle="Supported integrations"><p className="text-sm text-slate-600">No webhook integrations are currently configured or supported. This screen does not claim any external integration is active.</p></Card>}
     </div>
   );
 };

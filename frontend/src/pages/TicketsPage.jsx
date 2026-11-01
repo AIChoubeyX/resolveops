@@ -15,6 +15,7 @@ export const TicketsPage = () => {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [priority, setPriority] = useState('');
+  const [assignment, setAssignment] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -27,11 +28,15 @@ export const TicketsPage = () => {
     setLoading(true);
     try {
       setError('');
-      setTickets(await getTickets(activeOrganizationId, user, { search, status, priority }));
+      setTickets(await getTickets(activeOrganizationId, user, {
+        search, status, priority,
+        assignedToMe: assignment === 'mine' ? 'true' : '',
+        unassigned: assignment === 'unassigned' ? 'true' : '',
+      }));
     } catch (requestError) { setError(requestError.message); } finally { setLoading(false); }
   };
 
-  useEffect(() => { loadTickets(); }, [activeOrganizationId, user, search, status, priority]);
+  useEffect(() => { loadTickets(); }, [activeOrganizationId, user, search, status, priority, assignment]);
 
   const visibleTickets = useMemo(() => tickets, [tickets]);
   const submit = async (event) => {
@@ -60,14 +65,15 @@ export const TicketsPage = () => {
       <Card className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search title or description..." className="sm:col-span-6 px-3 py-2 text-sm border border-slate-300 rounded-lg" />
-          <select value={status} onChange={(event) => setStatus(event.target.value)} className="sm:col-span-3 px-3 py-2 text-sm border border-slate-300 rounded-lg"><option value="">All statuses</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select>
+          <select value={status} onChange={(event) => setStatus(event.target.value)} className="sm:col-span-3 px-3 py-2 text-sm border border-slate-300 rounded-lg"><option value="">All statuses</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="pending">Pending</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select>
+          <select value={assignment} onChange={(event) => setAssignment(event.target.value)} className="sm:col-span-3 px-3 py-2 text-sm border border-slate-300 rounded-lg"><option value="">All accessible tickets</option><option value="mine">My assigned tickets</option><option value="unassigned">Unassigned tickets</option></select>
           <select value={priority} onChange={(event) => setPriority(event.target.value)} className="sm:col-span-3 px-3 py-2 text-sm border border-slate-300 rounded-lg"><option value="">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
         </div>
       </Card>
       <Card className="overflow-hidden">
         {loading ? <div className="p-10 text-center text-sm text-slate-500">Loading tickets...</div> : !selectedOrganization ? <div className="p-10 text-center text-sm text-slate-500">No organization is available.</div> : visibleTickets.length === 0 ? <div className="p-10 text-center text-sm text-slate-500">No tickets match the current filters.</div> : (
-          <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b bg-slate-50 text-xs uppercase text-slate-500"><th className="p-3">Ticket</th><th className="p-3">Status</th><th className="p-3">Priority</th><th className="p-3">Assignee</th><th className="p-3">Created</th></tr></thead><tbody className="divide-y">
-            {visibleTickets.map((ticket) => <tr key={ticket.id} className="hover:bg-slate-50"><td className="p-3"><Link className="font-semibold hover:text-brand-600" to={`/tickets/${ticket.id}`}>{ticket.title}</Link><p className="text-xs text-slate-500 line-clamp-1">{ticket.description}</p></td><td className="p-3"><span className={`px-2 py-1 rounded-full text-xs border ${getStatusBadgeStyle(ticket.status)}`}>{ticket.status}</span></td><td className="p-3"><span className={`px-2 py-1 rounded-full text-xs border ${getPriorityBadgeStyle(ticket.priority)}`}>{ticket.priority}</span></td><td className="p-3 text-xs">{ticket.assignee?.name || 'Unassigned'}</td><td className="p-3 text-xs text-slate-500">{formatDate(ticket.created_at)}</td></tr>)}
+          <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b bg-slate-50 text-xs uppercase text-slate-500"><th className="p-3">Ticket</th><th className="p-3">Status</th><th className="p-3">Priority</th><th className="p-3">Assignee</th><th className="p-3">Created</th><th className="p-3 text-right">Action</th></tr></thead><tbody className="divide-y">
+            {visibleTickets.map((ticket) => <tr key={ticket.id} className="hover:bg-slate-50"><td className="p-3"><Link className="font-semibold hover:text-brand-600" to={`/tickets/${ticket.id}`}>{ticket.title}</Link><p className="text-xs text-slate-500 line-clamp-1">{ticket.description}</p></td><td className="p-3"><span className={`px-2 py-1 rounded-full text-xs border ${getStatusBadgeStyle(ticket.status)}`}>{ticket.status}</span></td><td className="p-3"><span className={`px-2 py-1 rounded-full text-xs border ${getPriorityBadgeStyle(ticket.priority)}`}>{ticket.priority}</span></td><td className="p-3 text-xs">{ticket.assignee?.name || 'Unassigned'}</td><td className="p-3 text-xs text-slate-500">{formatDate(ticket.created_at)}</td><td className="p-3 text-right"><Link to={`/tickets/${ticket.id}`} className="text-xs font-semibold text-brand-600 hover:underline">View details</Link></td></tr>)}
           </tbody></table></div>
         )}
       </Card>

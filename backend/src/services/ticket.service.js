@@ -21,6 +21,16 @@ const addActivity = async (client, ticketId, actorId, eventType, metadata = {}) 
   );
 };
 
+const allowedTransitions = {
+  open: new Set(['in_progress']),
+  in_progress: new Set(['pending', 'resolved']),
+  pending: new Set(['in_progress']),
+  resolved: new Set(['in_progress', 'closed']),
+  closed: new Set(),
+};
+
+export const isValidStatusTransition = (from, to) => from === to || Boolean(allowedTransitions[from]?.has(to));
+
 export const listOrganizations = async (userId) => {
   const result = await getPool().query(
     `SELECT o.id, o.name, om.role
@@ -40,6 +50,11 @@ export const listTickets = async (organizationId, filters = {}) => {
     values.push(`%${filters.search}%`);
     conditions.push(`(t.title ILIKE $${values.length} OR t.description ILIKE $${values.length})`);
   }
+  if (filters.assignedToMe) {
+    values.push(filters.assignedToMe);
+    conditions.push(`t.assignee_id = $${values.length}`);
+  }
+  if (filters.unassigned) conditions.push('t.assignee_id IS NULL');
   const result = await getPool().query(
     `${ticketSelect} WHERE ${conditions.join(' AND ')} ORDER BY t.created_at DESC`,
     values
@@ -80,6 +95,13 @@ export const updateTicket = async (ticketId, actorId, changes) => {
     const current = currentResult.rows[0];
     if (!current) return null;
     const nextStatus = changes.status ?? current.status;
+    if (changes.status && changes.status !== current.status
+      && !isValidStatusTransition(current.status, changes.status)) {
+      const error = new Error(`Invalid status transition from ${current.status} to ${changes.status}.`);
+      error.statusCode = 400;
+      error.code = 'INVALID_STATUS_TRANSITION';
+      throw error;
+    }
     const nextPriority = changes.priority ?? current.priority;
     const nextAssignee = changes.assigneeId === undefined ? current.assignee_id : changes.assigneeId;
     const resolvedAt = nextStatus === 'resolved' && current.status !== 'resolved'
@@ -101,7 +123,14 @@ export const updateTicket = async (ticketId, actorId, changes) => {
       await addActivity(client, ticketId, actorId, 'assignment_changed', { assigneeId: changes.assigneeId });
     }
     if (changes.status && changes.status !== current.status) {
-      await addActivity(client, ticketId, actorId, changes.status === 'resolved' ? 'resolved' : 'status_changed', { from: current.status, to: changes.status });
+      const eventType = changes.status === 'resolved'
+        ? 'resolved'
+        : changes.status === 'closed'
+          ? 'closed'
+          : changes.status === 'in_progress' && current.status === 'resolved'
+            ? 'reopened'
+            : 'status_changed';
+      await addActivity(client, ticketId, actorId, eventType, { from: current.status, to: changes.status });
     }
     if (changes.resolutionNotes !== undefined && resolutionNotes !== current.resolution_notes) {
       await addActivity(client, ticketId, actorId, 'resolution_notes_changed', { hasNotes: Boolean(resolutionNotes) });
@@ -127,27 +156,30 @@ export const listOrganizationMembers = async (organizationId) => {
   return result.rows;
 };
 
-export const listComments = async (ticketId) => {
+export const listComments = async (ticketId, includeInternal = false) => {
+  const visibilityCondition = includeInternal ? '' : `AND c.visibility = 'public'`;
   const result = await getPool().query(
-    `SELECT c.id, c.ticket_id, c.body, c.created_at,
+    `SELECT c.id, c.ticket_id, c.body, c.visibility, c.created_at,
             json_build_object('id', u.id, 'name', u.display_name, 'email', u.email) AS author
      FROM ticket_comments c JOIN users u ON u.id = c.author_id
-     WHERE c.ticket_id = $1 ORDER BY c.created_at ASC`,
+     WHERE c.ticket_id = $1 ${visibilityCondition} ORDER BY c.created_at ASC`,
     [ticketId]
   );
   return result.rows;
 };
 
-export const addComment = async (ticketId, authorId, body) => {
+export const addComment = async (ticketId, authorId, body, visibility = 'public') => {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
     const comment = await client.query(
-      `INSERT INTO ticket_comments (ticket_id, author_id, body) VALUES ($1, $2, $3)
-       RETURNING id, ticket_id, body, created_at`,
-      [ticketId, authorId, body.trim()]
+      `INSERT INTO ticket_comments (ticket_id, author_id, body, visibility) VALUES ($1, $2, $3, $4)
+       RETURNING id, ticket_id, body, visibility, created_at`,
+      [ticketId, authorId, body.trim(), visibility]
     );
-    await addActivity(client, ticketId, authorId, 'commented', { commentId: comment.rows[0].id });
+    await addActivity(client, ticketId, authorId,
+      visibility === 'internal' ? 'internal_note_added' : 'public_reply_added',
+      { commentId: comment.rows[0].id });
     await client.query('COMMIT');
     return { ...comment.rows[0], author: { id: authorId } };
   } catch (error) {
@@ -156,12 +188,15 @@ export const addComment = async (ticketId, authorId, body) => {
   } finally { client.release(); }
 };
 
-export const listActivity = async (ticketId) => {
+export const listActivity = async (ticketId, includeInternal = false) => {
+  const visibilityCondition = includeInternal
+    ? ''
+    : `AND a.event_type <> 'internal_note_added'`;
   const result = await getPool().query(
     `SELECT a.id, a.ticket_id, a.event_type, a.metadata, a.created_at,
             json_build_object('id', u.id, 'name', u.display_name, 'email', u.email) AS actor
      FROM ticket_activity a JOIN users u ON u.id = a.actor_id
-     WHERE a.ticket_id = $1 ORDER BY a.created_at ASC`,
+     WHERE a.ticket_id = $1 ${visibilityCondition} ORDER BY a.created_at ASC`,
     [ticketId]
   );
   return result.rows;
@@ -170,8 +205,9 @@ export const listActivity = async (ticketId) => {
 export const getMetrics = async (organizationId) => {
   const result = await getPool().query(
     `SELECT
-       COUNT(*) FILTER (WHERE status <> 'resolved')::int AS open_tickets,
-       COUNT(*) FILTER (WHERE status <> 'resolved' AND priority = 'critical')::int AS critical_open_tickets,
+       COUNT(*) FILTER (WHERE status = 'open')::int AS open_tickets,
+       COUNT(*) FILTER (WHERE status = 'open' AND priority = 'critical')::int AS critical_open_tickets,
+       COUNT(*) FILTER (WHERE assignee_id IS NULL AND status NOT IN ('closed', 'resolved'))::int AS unassigned_tickets,
        COUNT(*) FILTER (WHERE status = 'resolved' AND resolved_at >= CURRENT_DATE)::int AS resolved_today,
        COUNT(*) FILTER (WHERE status = 'open')::int AS open,
        COUNT(*) FILTER (WHERE status = 'in_progress')::int AS in_progress,

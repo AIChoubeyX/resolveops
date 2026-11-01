@@ -2,8 +2,8 @@ import { getPool } from '../config/database.js';
 import { getDatabaseUser } from './auth.service.js';
 
 const rolePermissions = {
-  admin: new Set(['read', 'create', 'comment', 'update', 'assign', 'resolve']),
-  agent: new Set(['read', 'create', 'comment', 'update', 'assign', 'resolve']),
+  admin: new Set(['read', 'create', 'comment', 'internal_comment', 'update', 'assign', 'resolve', 'manage_members', 'manage_settings']),
+  agent: new Set(['read', 'create', 'comment', 'internal_comment', 'update', 'assign', 'resolve']),
   reporter: new Set(['read', 'create', 'comment']),
   member: new Set(['read', 'create', 'comment']),
   viewer: new Set(['read']),

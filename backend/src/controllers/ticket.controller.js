@@ -14,14 +14,13 @@ import {
   getTicket,
   listActivity,
   listComments,
-  listOrganizationMembers,
   listOrganizations,
   listTickets,
   updateTicket,
 } from '../services/ticket.service.js';
 import { sendSuccess } from '../utils/apiResponse.js';
 
-const statuses = new Set(['open', 'in_progress', 'resolved']);
+const statuses = new Set(['open', 'in_progress', 'pending', 'resolved', 'closed']);
 const priorities = new Set(['low', 'medium', 'high', 'critical']);
 
 const invalid = (message) => {
@@ -45,24 +44,21 @@ export const getOrganizations = async (req, res, next) => {
   } catch (error) { return next(error); }
 };
 
-export const getOrganizationMembers = async (req, res, next) => {
-  try {
-    const organizationId = parseId(req.params.organizationId, 'organizationId');
-    const user = await getUser(req);
-    await requireOrganizationMembership(user.id, organizationId);
-    return sendSuccess(res, await listOrganizationMembers(organizationId));
-  } catch (error) { return next(error); }
-};
-
 export const getOrganizationTickets = async (req, res, next) => {
   try {
     const organizationId = parseId(req.params.organizationId, 'organizationId');
     const user = await getUser(req);
     await requireOrganizationMembership(user.id, organizationId);
-    const { status, priority, search } = req.query;
+    const { status, priority, search, assignedToMe, unassigned } = req.query;
     if (status && !statuses.has(status)) throw invalid('Invalid status filter.');
     if (priority && !priorities.has(priority)) throw invalid('Invalid priority filter.');
-    return sendSuccess(res, await listTickets(organizationId, { status, priority, search }));
+    return sendSuccess(res, await listTickets(organizationId, {
+      status,
+      priority,
+      search,
+      assignedToMe: assignedToMe === 'true' ? user.id : null,
+      unassigned: unassigned === 'true',
+    }));
   } catch (error) { return next(error); }
 };
 
@@ -131,10 +127,12 @@ export const postComment = async (req, res, next) => {
   try {
     const ticketId = parseId(req.params.ticketId, 'ticketId');
     const user = await getUser(req);
-    await requireTicketAccess(user.id, ticketId, 'comment');
     const body = req.body?.body;
+    const visibility = req.body?.visibility || 'public';
     if (!body?.trim() || body.trim().length > 5000) throw invalid('A comment between 1 and 5000 characters is required.');
-    return sendSuccess(res, await addComment(ticketId, user.id, body), 201);
+    if (!['public', 'internal'].includes(visibility)) throw invalid('Comment visibility must be public or internal.');
+    await requireTicketAccess(user.id, ticketId, visibility === 'internal' ? 'internal_comment' : 'comment');
+    return sendSuccess(res, await addComment(ticketId, user.id, body, visibility), 201);
   } catch (error) { return next(error); }
 };
 
@@ -142,8 +140,8 @@ export const getComments = async (req, res, next) => {
   try {
     const ticketId = parseId(req.params.ticketId, 'ticketId');
     const user = await getUser(req);
-    await requireTicketAccess(user.id, ticketId);
-    return sendSuccess(res, await listComments(ticketId));
+    const access = await requireTicketAccess(user.id, ticketId);
+    return sendSuccess(res, await listComments(ticketId, hasPermission(access.role, 'internal_comment')));
   } catch (error) { return next(error); }
 };
 
@@ -151,8 +149,8 @@ export const getActivity = async (req, res, next) => {
   try {
     const ticketId = parseId(req.params.ticketId, 'ticketId');
     const user = await getUser(req);
-    await requireTicketAccess(user.id, ticketId);
-    return sendSuccess(res, await listActivity(ticketId));
+    const access = await requireTicketAccess(user.id, ticketId);
+    return sendSuccess(res, await listActivity(ticketId, hasPermission(access.role, 'internal_comment')));
   } catch (error) { return next(error); }
 };
 
